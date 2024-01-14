@@ -1,7 +1,7 @@
-﻿using DapperHomeWork.Interfaces.Repositories;
-using DapperHomeWork.Realizations;
+﻿namespace DapperHomeWork.Configuration;
 
-namespace DapperHomeWork.Configuration;
+using Interfaces.Repositories;
+using Realizations;
 
 public static class ServiceCollectionExtensions
 {

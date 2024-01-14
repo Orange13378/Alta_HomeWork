@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  dapperhomework:
+    ports:
+      - "80:80"
+  
+  postgres:
+    environment:
+      POSTGRES_DB: homework
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Muslim213
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+      - ./001 InitDefaultData.sql:/docker-entrypoint-initdb.d/001 InitDefaultData.sql

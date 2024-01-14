@@ -1,16 +1,26 @@
-using DapperHomeWork.Configuration;
+using Dapper;
 using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using NLog;
 using NLog.Web;
+using Prometheus;
 using Serilog;
 using Serilog.Formatting.Json;
 
 namespace DapperHomeWork;
 
+using Middleware;
 using Models.Consts;
 using Options;
+using Configuration;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using System.Diagnostics.Metrics;
+using System.Diagnostics;
+using Npgsql;
+using Extensions;
 
 public class Program
 {
@@ -43,10 +53,11 @@ public class Program
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Console(
                 outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj} {NewLine} {Exception}")
-            .WriteTo.File(@"D:\Programer\DapperHomeWork\DapperHomeWork\bin\Debug\net7.0\logs\Serilog\txt\log.txt",
+            .WriteTo.File(
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "Serilog", "txt", "log.txt"),
                 rollingInterval: RollingInterval.Minute)
             .WriteTo.File(new JsonFormatter(),
-                @"D:\Programer\DapperHomeWork\DapperHomeWork\bin\Debug\net7.0\logs\Serilog\json\log.json",
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "Serilog", "json", "log.json"),
                 rollingInterval: RollingInterval.Minute)
             .CreateLogger();
     }
@@ -59,6 +70,57 @@ public class Program
         builder.Logging.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Trace);
 
         builder.Host.UseNLog();
+
+        #region OpenTelemetry
+
+        var meter = new Meter("Telemetry.Example", "1.0.0");
+
+        meter.CreateObservableGauge("users_in_db4", () =>
+        {
+            using var connection = new NpgsqlConnection(builder.Configuration.GetConnectionString("DbConnection"));
+            return connection.ExecuteScalar<int>("SELECT COUNT(*) FROM Users");
+        });
+
+        var activitySource = new ActivitySource("Telemetry.Example");
+
+        var activity = activitySource.StartActivity("UsersCounter");
+
+        var tracingOtlpEndpoint = builder.Configuration["OTLP_ENDPOINT_URL"];
+        var otel = builder.Services.AddOpenTelemetry();
+
+        otel.ConfigureResource(resource => resource
+            .AddService(serviceName: builder.Environment.ApplicationName));
+
+        otel.WithMetrics(metrics => metrics
+            .AddAspNetCoreInstrumentation()
+            .AddMeter(meter.Name)
+            // Metrics provides by ASP.NET Core in .NET 8
+            .AddMeter("Microsoft.AspNetCore.Hosting")
+            .AddMeter("Microsoft.AspNetCore.Server.Kestrel")
+            .AddPrometheusExporter());
+
+        otel.WithTracing(tracing =>
+        {
+            tracing.AddAspNetCoreInstrumentation();
+            tracing.AddHttpClientInstrumentation();
+            tracing.AddSource(activitySource.Name);
+            if (tracingOtlpEndpoint != null)
+            {
+                tracing.AddOtlpExporter(otlpOptions =>
+                {
+                    otlpOptions.Endpoint = new Uri(tracingOtlpEndpoint);
+                });
+            }
+            else
+            {
+                tracing.AddConsoleExporter();
+            }
+        });
+
+        #endregion
+
+        var server = new MetricServer("localhost", 9184);
+        server.Start();
 
         builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
@@ -112,22 +174,31 @@ public class Program
             .Configure<ConnectionStringsConfiguration>(builder.Configuration.GetSection("ConnectionStrings"));
 
         builder.Services.AddRepositories();
+        builder.Services.AddBus(builder.Configuration.GetSection("Bus"));
+
+        builder.Services.AddMemoryCache();
+
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = "192.168.0.103";
+            options.InstanceName = "Redis Server";
+        });
 
         var app = builder.Build();
 
-        if (app.Environment.IsDevelopment())
+        app.UseSwagger();
+        app.UseSwaggerUI(c =>
         {
-            app.UseSwagger();
-            app.UseSwaggerUI(c =>
-            {
-                c.SwaggerEndpoint("/swagger/v1/swagger.json", "DapperHomeWork API");
-            });
-        }
+            c.SwaggerEndpoint("/swagger/v1/swagger.json", "DapperHomeWork API");
+        });
 
-        app.MapControllers();
+        app.UseExceptionMiddleware();
 
         app.UseAuthentication();
         app.UseAuthorization();
+
+        app.MapControllers();
+        app.MapPrometheusScrapingEndpoint();
 
         return app;
     }

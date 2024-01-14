@@ -5,9 +5,9 @@ using Dapper;
 
 namespace DapperHomeWork.Realizations;
 
-using DapperHomeWork.Interfaces.Models;
 using Models.Log;
 using Interfaces.Repositories;
+using Interfaces.Models;
 using Options;
 
 public class LogRepository : ILoggerRepository, IDisposable

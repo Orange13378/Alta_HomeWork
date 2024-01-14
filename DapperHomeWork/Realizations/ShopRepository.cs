@@ -2,36 +2,67 @@
 using Npgsql;
 using Dapper;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace DapperHomeWork.Realizations;
 
 using Models.Shop;
 using Options;
 using Interfaces.Repositories;
-using DapperHomeWork.Interfaces.Models;
+using Interfaces.Models;
 
 public class ShopRepository : IShopRepository, IDisposable
 {
     private readonly IDbConnection _dbConnection;
+    private readonly IMemoryCache _cache;
+    private readonly MemoryCacheEntryOptions _cacheOptions;
 
-    public ShopRepository(IOptions<ConnectionStringsConfiguration> config)
+    public ShopRepository(IOptions<ConnectionStringsConfiguration> config, IMemoryCache cache)
     {
         _dbConnection = new NpgsqlConnection(config.Value.DbConnection);
+        _cache = cache;
+        _cacheOptions = new MemoryCacheEntryOptions();
+        _cacheOptions.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(24);
     }
 
-    public IEnumerable<IShop> GetAll()
+    public IEnumerable<Shop> GetAll()
     {
         return _dbConnection.Query<Shop>("SELECT * FROM Shops");
     }
 
     public IEnumerable<ShopType> GetAllShopType()
     {
-        return _dbConnection.Query<ShopType>("SELECT * FROM ShopTypes");
+        if (_cache.TryGetValue(nameof(GetAllShopType), out IEnumerable<ShopType>? shopTypes))
+            return shopTypes!;
+
+        shopTypes = _dbConnection.Query<ShopType>("SELECT * FROM ShopTypes");
+
+        _cache.Set(nameof(GetAllShopType), shopTypes, _cacheOptions);
+
+        return shopTypes;
     }
 
     public IShop? GetShopById(int id)
     {
-        return _dbConnection.QueryFirstOrDefault<Shop>("SELECT * FROM Shops WHERE Id = @Id", new { Id = id });
+        if (_cache.TryGetValue(nameof(GetShopById) + id, out IShop? shop)) 
+            return shop;
+
+        shop = _dbConnection.QueryFirstOrDefault<Shop>("SELECT * FROM Shops WHERE Id = @Id", new { Id = id });
+
+        if (shop == null)
+            return null;
+
+        _cache.Set(nameof(GetShopById) + id, shop);
+
+        return shop;
+    }
+
+    public IShop? GetShopByLogin(string login)
+    {
+        var shop = _dbConnection.QueryFirstOrDefault<Shop>("SELECT * FROM Shops WHERE Login = @Login",
+            new { UserName = login });
+
+        return shop;
     }
 
     public IEnumerable<IShop> GetSortedShop(bool isDesc)
@@ -55,15 +86,22 @@ public class ShopRepository : IShopRepository, IDisposable
         if (IsNullShopType(shop) || GetShopById(shop.Id) == null)
             return false;
 
-        return _dbConnection.Execute("""
+        if (_dbConnection.Execute("""
         UPDATE Shops SET ChangeDate = @ChangeDate, Name = @Name, 
-        Code = @Code, Address = @Address, TypeId = @TypeId, Login = @Login, Enabled = @Enabled 
+        Code = @Code, Address = @Address, TypeId = @TypeId, Enabled = @Enabled 
         WHERE Id = @Id
-        """, shop) > 0;
+        """, shop) <= 0) 
+            return false;
+
+        _cache.Set(nameof(GetShopById) + shop.Id, shop, _cacheOptions);
+        
+        return true;
     }
 
     public bool Delete(int id)
     {
+        _cache.Remove(nameof(GetShopById) + id);
+
         return _dbConnection.Execute("DELETE FROM Shops WHERE Id = @Id", new { Id = id }) > 0;
     }
 

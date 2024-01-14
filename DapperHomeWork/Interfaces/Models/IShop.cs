@@ -8,7 +8,6 @@ public interface IShop
     public string Address { get; set; }
     public string Phone { get; set; }
     public int TypeId { get; set; }
-    public string Login { get; set; }
     public bool Enabled { get; set; }
 }
 

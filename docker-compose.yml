@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  dapperhomework:
+    image: orange13378/dapperhomework
+    build:
+      context: .
+      dockerfile: DapperHomeWork/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    networks:
+      - pgnetwork
+  postgres:
+    image: orange13378/postgres:latest
+    restart: always
+    healthcheck:
+        test: ["CMD-SHELL", "pg_isready --dbname=homework --username=postgres"]
+        interval: 10s
+        timeout: 5s
+        retries: 10
+    environment:
+      POSTGRES_DB: homework
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Muslim213
+    ports:
+      - "5433:5432"
+    networks:
+      - pgnetwork
+        
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/001 InitDefaultData.sql
+  
+
+volumes:
+  pgdata:
+
+networks:
+  pgnetwork:
+    driver: bridge
+    

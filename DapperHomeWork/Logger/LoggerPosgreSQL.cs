@@ -6,6 +6,7 @@ public class LoggerPosgreSQL
 {
     public static async Task LogToPostgreSQLAsync(string level, string message, string timestamp)
     {
+        //var connectionSring = "Host=postgres;Port=5432;Database=homework;Username=postgres;Password=Muslim213;";
         var connectionSring = "Host=localhost;Port=5432;Database=homework;Username=postgres;Password=Muslim213;";
 
         using (var connection = new NpgsqlConnection(connectionSring))

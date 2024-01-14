@@ -86,7 +86,7 @@ public class ShopController : ControllerBase
             return BadRequest("Id не может быть меньше или равен 0");
 
         if (shop == null)
-            return BadRequest();
+            return BadRequest("Пустой запрос на обновление");
 
         shop.Id = id;
 

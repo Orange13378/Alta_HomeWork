@@ -1,36 +1,37 @@
-﻿using DapperHomeWork.Interfaces.Repositories;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace DapperHomeWork.Controllers
+namespace DapperHomeWork.Controllers;
+
+using Interfaces.Repositories;
+
+[Route("api/[controller]")]
+[ApiController]
+public class LogsController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class LogsController : ControllerBase
+    private readonly ILoggerRepository _logRepository;
+    public LogsController(ILoggerRepository logRepository)
     {
-        private readonly ILoggerRepository _logRepository;
-        public LogsController(ILoggerRepository logRepository)
-        {
-            _logRepository = logRepository;
-        }
+        _logRepository = logRepository;
+    }
 
-        [HttpGet("logs")]
-        [Authorize(Roles = "admin")]
-        public IActionResult GetLogs()
-        {
-            var logs = _logRepository.GetAllLogs();
+    [HttpGet("logs")]
+    [Authorize(Roles = "admin")]
+    public IActionResult GetLogs()
+    {
+        var logs = _logRepository.GetAllLogs();
 
-            return Ok(logs);
-        }
+        return Ok(logs);
+    }
 
-        [HttpDelete]
-        [Authorize(Roles = "admin")]
-        public IActionResult DeleteLogs()
-        {
-            if (!_logRepository.Delete())
-                return BadRequest();
+    [HttpDelete]
+    [Authorize(Roles = "admin")]
+    public IActionResult DeleteLogs()
+    {
+        if (!_logRepository.Delete())
+            return BadRequest();
 
-            return Ok();
-        }
+        return Ok();
     }
 }
+
